@@ -2,7 +2,7 @@
 >
 > 1. 本项目是 [xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live) 的 **Fork 版本**。
 > 2. **开发者（Developer）**：[xiaoyaocz](https://github.com/xiaoyaocz)。所有代码版权归开发者所有。
-> 3. **本项目改动**：添加了 GitHub Actions 自动化工作流，用于同步上游代码并构建 Release 安装包。
+> 3. **本项目改动**：添加了 Actions 自动化工作流，当原作者更新版本时自动构建安装包（可能延迟，每天0点检测一次）
 > 4. **下载地址**：请在 [Releases](../../releases) 页面下载最新编译的安装包。
 
 ---
