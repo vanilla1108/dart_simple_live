@@ -1,5 +1,11 @@
-> ### ⚠ 本项目不提供Release安装包，请自行编译后运行测试。
+> ### > ⚠️ **说明 / Note**：
+>
+> 1. 本项目是 [xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live) 的 **Fork 版本**。
+> 2. **原作者（Developer）**：[xiaoyaocz](https://github.com/xiaoyaocz)。所有代码版权归原作者所有。
+> 3. **本项目改动**：仅添加了 GitHub Actions 自动编译脚本，以便生成 Release 安装包。
+> 4. **下载地址**：请在 [Releases](../../releases) 页面下载最新编译的安装包。
 
+---
 
 <p align="center">
     <img width="128" src="/assets/logo.png" alt="Simple Live logo">
