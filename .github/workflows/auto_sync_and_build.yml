@@ -7,7 +7,7 @@ on:
   workflow_dispatch:      # 支持手动触发
 
 jobs:
-  sync-and-build:
+  check-upstream:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -69,8 +69,8 @@ jobs:
 
   # 以下构建任务仅在检测到新版本时运行
   build-mac-ios-android:
-    needs: sync-and-build
-    if: needs.sync-and-build.outputs.should_build == 'true'
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build == 'true'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -169,12 +169,12 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
-          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          tag_name: "v${{ needs.check-upstream.outputs.new_version }}"
+          name: "Auto Build v${{ needs.check-upstream.outputs.new_version }}"
           body: |
             Auto build from upstream [xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live)
 
-            Version: ${{ needs.sync-and-build.outputs.new_version }}
+            Version: ${{ needs.check-upstream.outputs.new_version }}
           prerelease: false
           token: ${{ secrets.TOKEN }}
           files: |
@@ -186,8 +186,8 @@ jobs:
             simple_live_app/build/dist/*/*.zip
 
   build-linux:
-    needs: sync-and-build
-    if: needs.sync-and-build.outputs.should_build == 'true'
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build == 'true'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -235,16 +235,16 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
-          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          tag_name: "v${{ needs.check-upstream.outputs.new_version }}"
+          name: "Auto Build v${{ needs.check-upstream.outputs.new_version }}"
           token: ${{ secrets.TOKEN }}
           files: |
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
 
   build-windows:
-    needs: sync-and-build
-    if: needs.sync-and-build.outputs.should_build == 'true'
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build == 'true'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -286,8 +286,8 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
-          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          tag_name: "v${{ needs.check-upstream.outputs.new_version }}"
+          name: "Auto Build v${{ needs.check-upstream.outputs.new_version }}"
           token: ${{ secrets.TOKEN }}
           files: |
             simple_live_app/build/dist/*/*.msix
