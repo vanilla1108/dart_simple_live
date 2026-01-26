@@ -1,0 +1,294 @@
+name: Auto Sync Upstream and Build
+
+# 每天检查一次上游更新，也可手动触发
+on:
+  schedule:
+    - cron: '0 16 * * *'  # 每天 UTC 16:00 (北京时间 0:00)
+  workflow_dispatch:      # 支持手动触发
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      new_version: ${{ steps.check.outputs.new_version }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/xiaoyaocz/dart_simple_live.git || true
+          git fetch upstream --tags
+
+      - name: Sync master branch
+        run: |
+          git checkout master
+          git merge upstream/master --no-edit || git merge upstream/master --strategy-option theirs --no-edit
+          git push origin master
+
+      - name: Check for new version
+        id: check
+        run: |
+          # 从 pubspec.yaml 获取上游最新版本号
+          UPSTREAM_VERSION=$(git show upstream/master:simple_live_app/pubspec.yaml | grep "^version:" | sed 's/version: //' | cut -d'+' -f1)
+          echo "Upstream version: $UPSTREAM_VERSION"
+
+          # 获取本地最新 tag
+          LOCAL_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LOCAL_VERSION=${LOCAL_TAG#v}
+          echo "Local latest tag: $LOCAL_TAG (version: $LOCAL_VERSION)"
+
+          # 比较版本号
+          if [ "$UPSTREAM_VERSION" != "$LOCAL_VERSION" ]; then
+            echo "New version detected: $UPSTREAM_VERSION"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "new_version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Already up to date"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create and push new tag
+        if: steps.check.outputs.should_build == 'true'
+        run: |
+          NEW_TAG="v${{ steps.check.outputs.new_version }}"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+          echo "Created and pushed tag: $NEW_TAG"
+
+  # 以下构建任务仅在检测到新版本时运行
+  build-mac-ios-android:
+    needs: sync-and-build
+    if: needs.sync-and-build.outputs.should_build == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Download Android keystore
+        id: android_keystore
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: keystore.jks
+          encodedString: ${{ secrets.KEYSTORE_BASE64 }}
+
+      - name: Create key.properties
+        run: |
+          echo "storeFile=${{ steps.android_keystore.outputs.filePath }}" > simple_live_app/android/key.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> simple_live_app/android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> simple_live_app/android/key.properties
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Flutter action
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Enable Flutter Desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Restore packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Install appdmg
+        run: npm install -g appdmg
+
+      - name: Install flutter_distributor
+        run: dart pub global activate flutter_distributor
+
+      - name: Build APK
+        run: |
+          cd simple_live_app
+          flutter build apk --release --split-per-abi
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
+
+      - name: Build IPA
+        run: |
+          cd simple_live_app
+          flutter build ios --release --no-codesign
+
+      - name: Create IPA
+        run: |
+          cd simple_live_app
+          mkdir build/ios/iphoneos/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/Runner.app
+          cd build/ios/iphoneos/
+          zip -q -r ios_no_sign.ipa Payload
+
+      - name: Upload IPA to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
+
+      - name: Build MacOS
+        run: |
+          cd simple_live_app
+          flutter_distributor package --platform macos --targets dmg,zip --skip-clean
+
+      - name: Upload MacOS to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            simple_live_app/build/dist/*/*.dmg
+            simple_live_app/build/dist/*/*.zip
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
+          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          body: |
+            Auto build from upstream [xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live)
+
+            Version: ${{ needs.sync-and-build.outputs.new_version }}
+          prerelease: false
+          token: ${{ secrets.TOKEN }}
+          files: |
+            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
+            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
+            simple_live_app/build/dist/*/*.dmg
+            simple_live_app/build/dist/*/*.zip
+
+  build-linux:
+    needs: sync-and-build
+    if: needs.sync-and-build.outputs.should_build == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Update apt-get
+        run: sudo apt-get update
+
+      - name: Install Dependencies
+        run: sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev libmpv-dev mpv
+
+      - name: Enable Flutter Desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Restore Packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Install flutter_distributor
+        run: dart pub global activate flutter_distributor
+
+      - name: Build Linux
+        run: |
+          cd simple_live_app
+          flutter_distributor package --platform linux --targets deb,zip --skip-clean
+
+      - name: Upload Linux APP to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            simple_live_app/build/dist/*/*.deb
+            simple_live_app/build/dist/*/*.zip
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
+          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          token: ${{ secrets.TOKEN }}
+          files: |
+            simple_live_app/build/dist/*/*.deb
+            simple_live_app/build/dist/*/*.zip
+
+  build-windows:
+    needs: sync-and-build
+    if: needs.sync-and-build.outputs.should_build == 'true'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.x"
+          cache: true
+
+      - name: Enable Flutter Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Restore Packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      - name: Install flutter_distributor
+        run: dart pub global activate flutter_distributor
+
+      - name: Build Windows
+        run: |
+          cd simple_live_app
+          flutter_distributor package --platform windows --targets msix,zip --skip-clean
+
+      - name: Upload Windows APP to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            simple_live_app/build/dist/*/*.msix
+            simple_live_app/build/dist/*/*.zip
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ needs.sync-and-build.outputs.new_version }}"
+          name: "Auto Build v${{ needs.sync-and-build.outputs.new_version }}"
+          token: ${{ secrets.TOKEN }}
+          files: |
+            simple_live_app/build/dist/*/*.msix
+            simple_live_app/build/dist/*/*.zip
