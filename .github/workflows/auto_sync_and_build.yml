@@ -1,6 +1,6 @@
 name: Auto Sync Upstream and Build
 
-# 每天检查一次上游更新，也可手动触发
+# 每天检查上游更新
 on:
   schedule:
     - cron: '0 16 * * *'  # 每天 UTC 16:00 (北京时间 0:00)
