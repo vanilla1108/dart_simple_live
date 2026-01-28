@@ -1,4 +1,4 @@
-> ### ⚠ **说明**：
+> ### > ⚠ **说明**：
 >
 > 1. 本项目是 [xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live) 的 **Fork 版本**；**开发者**：[xiaoyaocz](https://github.com/xiaoyaocz)
 > 2. **本项目改动**：添加了 Actions 自动化工作流，当原作者更新版本时自动构建安装包（每天凌晨检测一次）
