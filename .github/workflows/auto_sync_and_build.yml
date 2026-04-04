@@ -4,7 +4,6 @@ name: Auto Sync Upstream and Build
 on:
   schedule:
     - cron: '30 3 * * *'  # 每天 UTC 03:30 (北京时间 11:30)
-    - cron: '0 6 * * *'   # 每天 UTC 06:00 (北京时间 14:00)
   workflow_dispatch:      # 支持手动触发
 
 concurrency:
