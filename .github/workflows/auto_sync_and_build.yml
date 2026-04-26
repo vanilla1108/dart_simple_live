@@ -3,7 +3,7 @@ name: Auto Sync Upstream and Build
 # 每天检查上游更新
 on:
   schedule:
-    - cron: '30 3 * * *'  # 每天 UTC 03:30 (北京时间 11:30)
+    - cron: '30 3 */7 * *'   # 每7天的 UTC 03:30 触发(北京时间 11:30)
   workflow_dispatch:      # 支持手动触发
 
 concurrency:
